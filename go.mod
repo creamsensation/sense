@@ -11,6 +11,7 @@ require (
 	github.com/creamsensation/form v0.1.3
 	github.com/creamsensation/mailer v0.1.0
 	github.com/creamsensation/quirk v0.1.6
+	github.com/creamsensation/socketer v0.1.0
 	github.com/go-redis/redis/v8 v8.11.5
 )
 
