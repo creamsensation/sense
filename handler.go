@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/creamsensation/socketer"
+
 	"github.com/creamsensation/sense/internal/constant/contentType"
 	"github.com/creamsensation/sense/internal/constant/dataType"
 	"github.com/creamsensation/sense/internal/constant/header"
 	"github.com/creamsensation/sense/internal/constant/model"
-	"github.com/creamsensation/socketer"
 )
 
 type Handler func(c Context) error
@@ -164,6 +165,7 @@ func createRecover(request *request, res http.ResponseWriter, interceptor *inter
 
 func applyInternalMiddlewares(route Route, middlewares []Handler) []Handler {
 	if len(route.Firewalls) > 0 {
+		middlewares = append(middlewares, trailingSlashMiddleware())
 		middlewares = append(middlewares, authMiddleware(route.Firewalls))
 	}
 	return middlewares

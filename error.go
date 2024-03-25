@@ -10,3 +10,7 @@ var (
 	ErrorOpenFile         = errors.New("file cannot be opened")
 	ErrorReadData         = errors.New("cannot read data")
 )
+
+type ErrorsWrapper[T any] struct {
+	Errors T `json:"errors"`
+}

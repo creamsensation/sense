@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/creamsensation/sense/config"
 )
@@ -42,5 +43,15 @@ func authMiddleware(firewalls []config.Firewall) Handler {
 			}
 		}
 		return c.Continue()
+	}
+}
+
+func trailingSlashMiddleware() Handler {
+	return func(c Context) error {
+		path := c.Request().Path()
+		if strings.HasSuffix(path, "/") {
+			return c.Continue()
+		}
+		return c.Send().Redirect(path + "/")
 	}
 }

@@ -5,13 +5,15 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/creamsensation/auth"
 	"github.com/creamsensation/cache"
 	"github.com/creamsensation/cookie"
 	"github.com/creamsensation/filesystem"
 	"github.com/creamsensation/mailer"
-	"github.com/creamsensation/quirk"
 	"github.com/creamsensation/socketer"
+
+	"github.com/creamsensation/auth"
+	"github.com/creamsensation/quirk"
+	"github.com/creamsensation/validator"
 )
 
 type Context interface {
@@ -28,6 +30,7 @@ type Context interface {
 	Request() RequestContext
 	Send() SendContext
 	Translate(key string, args ...map[string]any) string
+	Validate(s validator.Schema, data any) (bool, ErrorsWrapper[validator.Errors])
 }
 
 type handlerContext struct {
@@ -144,5 +147,26 @@ func (c *handlerContext) Send() SendContext {
 }
 
 func (c *handlerContext) Translate(key string, args ...map[string]any) string {
-	return key
+	if !c.config.Localization.Enabled {
+		return key
+	}
+	return c.config.Localization.Translator.Translate(c.Lang().Get(), key, args...)
+}
+
+func (c *handlerContext) Validate(s validator.Schema, data any) (bool, ErrorsWrapper[validator.Errors]) {
+	m := c.config.Localization.Validator
+	v := validator.New(
+		validator.Config{
+			Messages: validator.Messages{
+				Email:     c.Translate(m.Email),
+				Required:  c.Translate(m.Required),
+				MinText:   c.Translate(m.MinText),
+				MaxText:   c.Translate(m.MaxText),
+				MinNumber: c.Translate(m.MinNumber),
+				MaxNumber: c.Translate(m.MaxNumber),
+			},
+		},
+	)
+	ok, errs := v.Json(s, data)
+	return ok, ErrorsWrapper[validator.Errors]{errs}
 }

@@ -32,20 +32,11 @@ func formatPath(path string) string {
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-	if path != "/" {
-		path = strings.TrimSuffix(path, "/")
-	}
 	return path
 }
 
 func createRoutePattern(method, pathPrefix, path string) string {
 	path = pathPrefix + formatPath(path)
-	if !strings.Contains(path, "...") {
-		if !strings.HasSuffix(path, "/") {
-			path += "/"
-		}
-		path += "{$}"
-	}
 	if len(method) > 0 {
 		path = method + " " + path
 	}

@@ -6,8 +6,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-
-	"github.com/creamsensation/translator"
 )
 
 type Sense interface {
@@ -18,10 +16,9 @@ type Sense interface {
 type sense struct {
 	context.Context
 	*router
-	config     Config
-	mux        *http.ServeMux
-	routes     *[]Route
-	translator translator.Translator
+	config Config
+	mux    *http.ServeMux
+	routes *[]Route
 }
 
 func New(config Config) Sense {

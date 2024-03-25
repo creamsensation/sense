@@ -1,19 +1,23 @@
 package sense
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
+
+	"github.com/creamsensation/socketer"
 
 	"github.com/creamsensation/auth"
 	"github.com/creamsensation/sense/internal/constant/contentType"
 	"github.com/creamsensation/sense/internal/constant/dataType"
-	"github.com/creamsensation/socketer"
 )
 
 type SendContext interface {
 	Header() http.Header
 	Status(statusCode int) SendContext
-	Error(err error) error
-	Text(text string) error
+	Error(err any) error
+	Text(value string) error
+	Bool(value bool) error
 	Json(value any) error
 	Xml(value any) error
 	Redirect(url string) error
@@ -43,7 +47,18 @@ func (s *sender) Status(statusCode int) SendContext {
 	return s
 }
 
-func (s *sender) Error(err error) error {
+func (s *sender) Error(e any) error {
+	var err error
+	switch v := e.(type) {
+	case nil:
+		return s.Bool(true)
+	case string:
+		err = errors.New(v)
+	case error:
+		err = v
+	default:
+		err = errors.New(fmt.Sprintf("%v", e))
+	}
 	var bytes []byte
 	if s.interceptor == nil || (s.interceptor != nil && s.interceptor.onError == nil) {
 		bytes, err = wrapError(err)
@@ -90,17 +105,32 @@ func (s *sender) Xml(value any) error {
 	return err
 }
 
-func (s *sender) Text(text string) error {
+func (s *sender) Text(value string) error {
 	var bytes []byte
 	var err error
 	if s.interceptor == nil || (s.interceptor != nil && s.interceptor.onText == nil) {
-		bytes, err = wrapResult(text)
+		bytes, err = wrapResult(value)
 	}
 	if s.interceptor != nil && s.interceptor.onText != nil {
-		bytes, err = wrapResult(s.interceptor.onText(s.request, text))
+		bytes, err = wrapResult(s.interceptor.onText(s.request, value))
 	}
 	s.bytes = bytes
 	s.dataType = dataType.Text
+	s.contentType = contentType.Json
+	return err
+}
+
+func (s *sender) Bool(value bool) error {
+	var bytes []byte
+	var err error
+	if s.interceptor == nil || (s.interceptor != nil && s.interceptor.onBool == nil) {
+		bytes, err = wrapResult(value)
+	}
+	if s.interceptor != nil && s.interceptor.onBool != nil {
+		bytes, err = wrapResult(s.interceptor.onBool(s.request, value))
+	}
+	s.bytes = bytes
+	s.dataType = dataType.Bool
 	s.contentType = contentType.Json
 	return err
 }
