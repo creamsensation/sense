@@ -1,61 +1,68 @@
 package sense
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-
-	"github.com/creamsensation/socketer"
-
+	"strings"
+	
 	"github.com/creamsensation/sense/internal/constant/contentType"
 	"github.com/creamsensation/sense/internal/constant/dataType"
 	"github.com/creamsensation/sense/internal/constant/header"
-	"github.com/creamsensation/sense/internal/constant/model"
 )
 
 type Handler func(c Context) error
 
-func createHandlerFunc(
-	config Config, route Route, handler Handler, middlewares []Handler, hook *hook, interceptor *interceptor,
-	ws map[string]socketer.Ws,
-) func(
+func createHandlerFunc(args handlerFuncArgs) func(
 	http.ResponseWriter, *http.Request,
 ) {
 	return func(res http.ResponseWriter, req *http.Request) {
 		var err error
-		c := createHandlerContext(config, res, req, interceptor, ws)
-		defer createRecover(c.request, res, interceptor)
-		middlewares = applyInternalMiddlewares(route, middlewares)
-		for _, middleware := range middlewares {
+		c := createHandlerContext(
+			handlerContextArgs{
+				config: args.config,
+				req:    req,
+				res:    res,
+			},
+		)
+		if args.config.Router.Recover {
+			defer createRecover(res)
+		}
+		args.middlewares = applyInternalMiddlewares(args.route, args.middlewares)
+		for _, middleware := range args.middlewares {
 			c.mu.Lock()
 			err = middleware(c)
 			if err != nil {
 				c.mu.Unlock()
-				createHandlerResponse(c, hook, err)
+				createHandlerResponse(c, err)
 				return
 			}
 		}
 		if len(c.send.dataType) == 0 {
-			err = handler(c)
+			err = args.handler(c)
 		}
-		createHandlerResponse(c, hook, err)
+		createHandlerResponse(c, err)
 	}
 }
 
-func createWsHandlerFunc(
-	config Config, route Route, handler Handler, middlewares []Handler, interceptor *interceptor,
-	ws map[string]socketer.Ws,
-	name string,
-) func(
+func createWsHandlerFunc(args handlerFuncArgs) func(
 	http.ResponseWriter, *http.Request,
 ) {
 	return func(res http.ResponseWriter, req *http.Request) {
 		var err error
-		c := createHandlerContext(config, res, req, interceptor, ws)
-		defer createRecover(c.request, res, interceptor)
-		middlewares = applyInternalMiddlewares(route, middlewares)
-		for _, middleware := range middlewares {
+		c := createHandlerContext(
+			handlerContextArgs{
+				config: args.config,
+				req:    req,
+				res:    res,
+				ws:     args.ws,
+			},
+		)
+		if args.config.Router.Recover {
+			defer createRecover(res)
+		}
+		args.middlewares = applyInternalMiddlewares(args.route, args.middlewares)
+		for _, middleware := range args.middlewares {
 			c.mu.Lock()
 			err = middleware(c)
 			if err != nil {
@@ -64,11 +71,11 @@ func createWsHandlerFunc(
 			}
 		}
 		var id int
-		if err := ws[name].OnRead(
+		if err := args.ws[args.name].OnRead(
 			func(bytes []byte) {
 				c.parse.bytes = bytes
-				if err := handler(c); err != nil {
-					panic(err) // TODO
+				if err := args.handler(c); err != nil {
+					panic(err)
 				}
 				c.parse.bytes = nil
 			},
@@ -78,14 +85,29 @@ func createWsHandlerFunc(
 	}
 }
 
-func createHandlerResponse(c *handlerContext, hook *hook, err error) {
+func createEmptyHandlerResponse() func(
+	http.ResponseWriter, *http.Request,
+) {
+	return func(res http.ResponseWriter, req *http.Request) {
+		res.WriteHeader(http.StatusOK)
+	}
+}
+
+func createHandlerCanonicalRedirect() func(http.ResponseWriter, *http.Request) {
+	return func(res http.ResponseWriter, req *http.Request) {
+		uri := req.Header.Get("X-Forwarded-Uri")
+		if len(uri) == 0 {
+			uri = req.RequestURI
+		}
+		http.Redirect(res, req, strings.TrimSuffix(uri, "/"), http.StatusMovedPermanently)
+	}
+}
+
+func createHandlerResponse(c *handlerContext, err error) {
 	if err != nil {
 		errorBytes, err := wrapError(err)
 		if err != nil {
 			http.Error(c.res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			callHookIfExists(
-				c, hook, dataType.Error, contentType.Text, []byte(http.StatusText(http.StatusInternalServerError)),
-			)
 			return
 		}
 		c.res.Header().Set(header.ContentType, contentType.Json)
@@ -95,9 +117,6 @@ func createHandlerResponse(c *handlerContext, hook *hook, err error) {
 		_, err = c.res.Write(errorBytes)
 		if err != nil {
 			http.Error(c.res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			callHookIfExists(
-				c, hook, dataType.Error, contentType.Text, []byte(http.StatusText(http.StatusInternalServerError)),
-			)
 			return
 		}
 		return
@@ -117,38 +136,15 @@ func createHandlerResponse(c *handlerContext, hook *hook, err error) {
 	c.res.WriteHeader(c.send.statusCode)
 	if _, err = c.res.Write(c.send.bytes); err != nil {
 		http.Error(c.res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		callHookIfExists(c, hook, dataType.Error, contentType.Text, []byte(http.StatusText(http.StatusInternalServerError)))
 		return
 	}
-	callHookIfExists(c, hook, c.send.dataType, c.send.contentType, c.send.bytes)
 }
 
-func callHookIfExists(c *handlerContext, hook *hook, dt, ct string, bytes []byte) {
-	switch dt {
-	case dataType.Error:
-		if hook.onError != nil {
-			switch ct {
-			case contentType.Json:
-				var e model.Error
-				_ = json.Unmarshal(bytes, &e)
-				hook.onError(c.Request(), errors.New(e.Error))
-			case contentType.Text:
-				hook.onError(c.Request(), errors.New(string(bytes)))
-			}
-		}
-	}
-}
-
-func createRecover(request *request, res http.ResponseWriter, interceptor *interceptor) {
+func createRecover(res http.ResponseWriter) {
 	if e := recover(); e != nil {
 		var bytes []byte
 		err := errors.New(fmt.Sprintf("%v", e))
-		if interceptor == nil || (interceptor != nil && interceptor.onError == nil) {
-			bytes, err = wrapError(err)
-		}
-		if interceptor != nil && interceptor.onError != nil {
-			bytes, err = wrapError(interceptor.onError(request, err))
-		}
+		bytes, err = wrapError(err)
 		if err != nil {
 			http.Error(res, err.Error(), http.StatusInternalServerError)
 			return

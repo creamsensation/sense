@@ -26,10 +26,18 @@ func New(config Config) Sense {
 	routes := make([]Route, 0)
 	return &sense{
 		Context: context.Background(),
-		router:  createRouter(config, mux, &routes, formatPath(config.Router.Prefix), []Handler{}),
-		config:  config,
-		mux:     mux,
-		routes:  &routes,
+		router: createRouter(
+			routerArgs{
+				config:      config,
+				mux:         mux,
+				routes:      &routes,
+				pathPrefix:  formatPath(config.Router.Prefix),
+				middlewares: []Handler{},
+			},
+		),
+		config: config,
+		mux:    mux,
+		routes: &routes,
 	}
 }
 
@@ -43,7 +51,6 @@ func (s *sense) beforeRun(address string) {
 	if strings.HasPrefix(address, ":") {
 		address = "localhost" + address
 	}
-
 	fmt.Printf(
 		"%s%s%s %s\n",
 		WhiteColor.Render("Sense ["),

@@ -4,16 +4,16 @@ import (
 	"context"
 	"net/http"
 	"sync"
-
-	"github.com/creamsensation/cache"
-	"github.com/creamsensation/cookie"
+	
 	"github.com/creamsensation/filesystem"
-	"github.com/creamsensation/mailer"
-	"github.com/creamsensation/socketer"
-
-	"github.com/creamsensation/auth"
-	"github.com/creamsensation/quirk"
 	"github.com/creamsensation/validator"
+	
+	"github.com/creamsensation/auth"
+	"github.com/creamsensation/cookie"
+	
+	"github.com/creamsensation/cache"
+	"github.com/creamsensation/mailer"
+	"github.com/creamsensation/quirk"
 )
 
 type Context interface {
@@ -24,6 +24,7 @@ type Context interface {
 	Continue() error
 	Db(dbname ...string) *quirk.Quirk
 	Email() mailer.Mailer
+	Export() ExportContext
 	Files() filesystem.Client
 	Lang() LangContext
 	Parse() ParseContext
@@ -47,26 +48,28 @@ type handlerContext struct {
 	send    *sender
 }
 
-func createHandlerContext(
-	config Config, res http.ResponseWriter, req *http.Request, interceptor *interceptor, ws map[string]socketer.Ws,
-) *handlerContext {
+func createHandlerContext(args handlerContextArgs) *handlerContext {
 	ctx := context.Background()
 	hc := &handlerContext{
 		Context: ctx,
-		config:  config,
-		res:     res,
-		req:     req,
+		config:  args.config,
+		res:     args.res,
+		req:     args.req,
 		mu:      &sync.Mutex{},
-		cookie:  cookie.New(req, res, formatPath(config.Router.Prefix)+"/"),
-		files:   filesystem.New(ctx, config.Filesystem),
-		parse:   &parser{req: req, limit: config.Parser.Limit},
-		request: &request{req: req},
+		cookie:  cookie.New(args.req, args.res, formatPath(args.config.Router.Prefix)+"/"),
+		files:   filesystem.New(ctx, args.config.Filesystem),
+		parse:   &parser{req: args.req, limit: args.config.Parser.Limit},
+		request: &request{req: args.req},
 	}
-	hc.lang = lang{config: config.Localization, cookie: hc.cookie}
+	hc.lang = lang{config: args.config.Localization, cookie: hc.cookie}
 	hc.send = &sender{
-		request: hc.request, res: res, statusCode: http.StatusOK, interceptor: interceptor, ws: ws,
-		auth: hc.Auth(),
+		request:    hc.request,
+		res:        args.res,
+		statusCode: http.StatusOK,
+		ws:         args.ws,
+		auth:       hc.Auth(),
 	}
+	hc.Lang().CreateIfNotExists()
 	return hc
 }
 
@@ -126,6 +129,10 @@ func (c *handlerContext) Email() mailer.Mailer {
 	return mailer.New(c.config.Smtp)
 }
 
+func (c *handlerContext) Export() ExportContext {
+	return createExport(c.config.Export)
+}
+
 func (c *handlerContext) Files() filesystem.Client {
 	return c.files
 }
@@ -155,16 +162,30 @@ func (c *handlerContext) Translate(key string, args ...map[string]any) string {
 
 func (c *handlerContext) Validate(s validator.Schema, data any) (bool, ErrorsWrapper[validator.Errors]) {
 	m := c.config.Localization.Validator
+	var messages validator.Messages
+	if !c.config.Localization.Enabled {
+		messages = validator.Messages{
+			Email:     m.Email,
+			Required:  m.Required,
+			MinText:   m.MinText,
+			MaxText:   m.MaxText,
+			MinNumber: m.MinNumber,
+			MaxNumber: m.MaxNumber,
+		}
+	}
+	if c.config.Localization.Enabled {
+		messages = validator.Messages{
+			Email:     c.Translate(m.Email),
+			Required:  c.Translate(m.Required),
+			MinText:   c.Translate(m.MinText),
+			MaxText:   c.Translate(m.MaxText),
+			MinNumber: c.Translate(m.MinNumber),
+			MaxNumber: c.Translate(m.MaxNumber),
+		}
+	}
 	v := validator.New(
 		validator.Config{
-			Messages: validator.Messages{
-				Email:     c.Translate(m.Email),
-				Required:  c.Translate(m.Required),
-				MinText:   c.Translate(m.MinText),
-				MaxText:   c.Translate(m.MaxText),
-				MinNumber: c.Translate(m.MinNumber),
-				MaxNumber: c.Translate(m.MaxNumber),
-			},
+			Messages: messages,
 		},
 	)
 	ok, errs := v.Json(s, data)

@@ -2,7 +2,7 @@ package sense
 
 import (
 	"time"
-
+	
 	"github.com/creamsensation/cookie"
 	"github.com/creamsensation/sense/config"
 )
@@ -10,6 +10,8 @@ import (
 type LangContext interface {
 	Exists() bool
 	Get() string
+	Set(langCode string)
+	CreateIfNotExists()
 }
 
 type lang struct {
@@ -32,15 +34,23 @@ func (l lang) Exists() bool {
 	return len(l.Get()) > 0
 }
 
+func (l lang) CreateIfNotExists() {
+	if !l.config.Enabled {
+		return
+	}
+	langCode := l.cookie.Get(LangCookieKey)
+	if len(langCode) != 0 {
+		return
+	}
+	langCode = l.getMainLangCode()
+	l.Set(langCode)
+}
+
 func (l lang) Get() string {
 	if !l.config.Enabled {
 		return ""
 	}
 	langCode := l.cookie.Get(LangCookieKey)
-	if len(langCode) == 0 {
-		langCode = l.getMainLangCode()
-		l.Set(langCode)
-	}
 	return langCode
 }
 

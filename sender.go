@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-
+	
 	"github.com/creamsensation/socketer"
-
+	
 	"github.com/creamsensation/auth"
 	"github.com/creamsensation/sense/internal/constant/contentType"
 	"github.com/creamsensation/sense/internal/constant/dataType"
@@ -17,9 +17,10 @@ type SendContext interface {
 	Status(statusCode int) SendContext
 	Error(err any) error
 	Text(value string) error
+	Html(value string) error
 	Bool(value bool) error
 	Json(value any) error
-	Xml(value any) error
+	Xml(value string) error
 	Redirect(url string) error
 	File(name string, bytes []byte) error
 	Ws(name string) WsWriter
@@ -27,7 +28,6 @@ type SendContext interface {
 
 type sender struct {
 	auth        auth.Manager
-	interceptor *interceptor
 	request     *request
 	ws          map[string]socketer.Ws
 	res         http.ResponseWriter
@@ -59,13 +59,7 @@ func (s *sender) Error(e any) error {
 	default:
 		err = errors.New(fmt.Sprintf("%v", e))
 	}
-	var bytes []byte
-	if s.interceptor == nil || (s.interceptor != nil && s.interceptor.onError == nil) {
-		bytes, err = wrapError(err)
-	}
-	if s.interceptor != nil && s.interceptor.onError != nil {
-		bytes, err = wrapError(s.interceptor.onError(s.request, err))
-	}
+	bytes, err := wrapError(err)
 	s.bytes = bytes
 	s.dataType = dataType.Error
 	s.contentType = contentType.Json
@@ -76,29 +70,23 @@ func (s *sender) Error(e any) error {
 }
 
 func (s *sender) Json(value any) error {
-	var bytes []byte
-	var err error
-	if s.interceptor == nil || (s.interceptor != nil && s.interceptor.onJson == nil) {
-		bytes, err = wrapResult(value)
-	}
-	if s.interceptor != nil && s.interceptor.onJson != nil {
-		bytes, err = wrapResult(s.interceptor.onJson(s.request, value))
-	}
+	bytes, err := wrapResult(value)
 	s.bytes = bytes
 	s.dataType = dataType.Json
 	s.contentType = contentType.Json
 	return err
 }
 
-func (s *sender) Xml(value any) error {
-	var bytes []byte
-	var err error
-	if s.interceptor == nil || (s.interceptor != nil && s.interceptor.onXml == nil) {
-		bytes, err = wrapResult(value)
-	}
-	if s.interceptor != nil && s.interceptor.onJson != nil {
-		bytes, err = wrapResult(s.interceptor.onXml(s.request, value))
-	}
+func (s *sender) Html(value string) error {
+	bytes, err := wrapResult(value)
+	s.bytes = bytes
+	s.dataType = dataType.Html
+	s.contentType = contentType.Html
+	return err
+}
+
+func (s *sender) Xml(value string) error {
+	bytes, err := wrapResult(value)
 	s.bytes = bytes
 	s.dataType = dataType.Xml
 	s.contentType = contentType.Xml
@@ -106,14 +94,7 @@ func (s *sender) Xml(value any) error {
 }
 
 func (s *sender) Text(value string) error {
-	var bytes []byte
-	var err error
-	if s.interceptor == nil || (s.interceptor != nil && s.interceptor.onText == nil) {
-		bytes, err = wrapResult(value)
-	}
-	if s.interceptor != nil && s.interceptor.onText != nil {
-		bytes, err = wrapResult(s.interceptor.onText(s.request, value))
-	}
+	bytes, err := wrapResult(value)
 	s.bytes = bytes
 	s.dataType = dataType.Text
 	s.contentType = contentType.Json
@@ -121,14 +102,7 @@ func (s *sender) Text(value string) error {
 }
 
 func (s *sender) Bool(value bool) error {
-	var bytes []byte
-	var err error
-	if s.interceptor == nil || (s.interceptor != nil && s.interceptor.onBool == nil) {
-		bytes, err = wrapResult(value)
-	}
-	if s.interceptor != nil && s.interceptor.onBool != nil {
-		bytes, err = wrapResult(s.interceptor.onBool(s.request, value))
-	}
+	bytes, err := wrapResult(value)
 	s.bytes = bytes
 	s.dataType = dataType.Bool
 	s.contentType = contentType.Json

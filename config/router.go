@@ -1,5 +1,6 @@
 package config
 
 type Router struct {
-	Prefix string
+	Prefix  string
+	Recover bool
 }

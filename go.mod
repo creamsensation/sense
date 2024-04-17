@@ -4,9 +4,9 @@ go 1.22
 
 require (
 	github.com/charmbracelet/lipgloss v0.9.1
-	github.com/creamsensation/auth v0.1.1
+	github.com/creamsensation/auth v0.1.2
 	github.com/creamsensation/cache v0.1.0
-	github.com/creamsensation/cookie v0.1.0
+	github.com/creamsensation/cookie v0.1.1
 	github.com/creamsensation/filesystem v0.1.0
 	github.com/creamsensation/form v0.1.3
 	github.com/creamsensation/mailer v0.1.0

@@ -10,6 +10,7 @@ const (
 	ETag               = "ETag"
 	IfNoneMatch        = "If-None-Match"
 	Ip                 = "X-Forwarded-For"
+	Origin             = "Origin"
 	SetCookie          = "Set-Cookie"
 	UserAgent          = "User-Agent"
 )

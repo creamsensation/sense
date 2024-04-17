@@ -2,7 +2,7 @@ package sense
 
 import (
 	"net/http"
-
+	
 	"github.com/creamsensation/sense/internal/constant/header"
 )
 
@@ -13,6 +13,7 @@ type RequestContext interface {
 	Ip() string
 	Is() RequestIsContext
 	Method() string
+	Origin() string
 	Path() string
 	Protocol() string
 	Raw() *http.Request
@@ -53,6 +54,10 @@ func (r *request) Is() RequestIsContext {
 
 func (r *request) Method() string {
 	return r.req.Method
+}
+
+func (r *request) Origin() string {
+	return r.req.Header.Get(header.Origin)
 }
 
 func (r *request) Path() string {

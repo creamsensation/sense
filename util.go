@@ -3,10 +3,11 @@ package sense
 import (
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
-
+	
 	"github.com/creamsensation/sense/config"
 	"github.com/creamsensation/sense/internal/constant/contentType"
 	"github.com/creamsensation/sense/internal/constant/header"
@@ -26,17 +27,11 @@ func getFileSuffixFromName(filename string) string {
 }
 
 func formatPath(path string) string {
-	if len(path) == 0 {
-		return path
-	}
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	return path
+	return strings.TrimSuffix(path, "/")
 }
 
 func createRoutePattern(method, pathPrefix, path string) string {
-	path = pathPrefix + formatPath(path)
+	path = pathPrefix + path
 	if len(method) > 0 {
 		path = method + " " + path
 	}
@@ -100,4 +95,20 @@ func findFirewallsWithPath(path string, firewalls []config.Firewall) []config.Fi
 		}
 	}
 	return result
+}
+
+func setValueToReflected(kind reflect.Kind, field reflect.Value, value string) {
+	switch kind {
+	case reflect.String:
+		field.Set(reflect.ValueOf(value))
+	case reflect.Bool:
+		field.Set(reflect.ValueOf(value == "true"))
+	case reflect.Int:
+		field.Set(reflect.ValueOf(assertStringToType[int](value)))
+	case reflect.Float32:
+		field.Set(reflect.ValueOf(assertStringToType[float64](value)))
+	case reflect.Float64:
+		field.Set(reflect.ValueOf(assertStringToType[float64](value)))
+	default:
+	}
 }
